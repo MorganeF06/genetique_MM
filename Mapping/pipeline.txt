@@ -1,0 +1,72 @@
+## STAR
+
+# Genome de reference (fasta) + Annotation (gtf)
+
+wget ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_26/GRCh38.p10.genome.fa.gz
+
+wget ftp://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_26/gencode.v26.annotation.gtf.gz
+
+gunzip gencode.v26.annotation.gtf.gz GRCh38.p10.genome.fa.gz 
+
+
+# Index genome STAR
+
+STAR --runThreadN 16 --runMode genomeGenerate --genomeDir ~/gencode/STAR_index --genomeFastaFiles ~/gencode/GRCh38.p10.genome.fa --sjdbGTFfile ~/gencode/gencode.v26.annotation.gtf --sjdbOverhang 74
+
+2x75 bp paired-end sequencing protocol : matching sjdbOverhang is 74
+
+
+
+# Mapping STAR
+
+find storage/PJ1803065-SAADI-mRNA/Rawdata/*/*_R1_fastq.gz > R1.tmp
+find storage/PJ1803065-SAADI-mRNA/Rawdata/*/*_R2_fastq.gz > R2.tmp
+paste -d ' ' 'R1.tmp' 'R2.tmp' > 'R1_R2.tmp'
+
+
+cat R1_R2.tmp | while read line ; do nom_rep=$(echo $line | cut -f4 -d/);
+mkdir "/home/morgane/gencode/mapping_STAR/"$nom_rep"/";
+STAR --runThreadN 16 --genomeDir /home/morgane/gencode/STAR_index/ --readFilesIn $line --readFilesCommand gunzip -c --outFileNamePrefix "/home/morgane/gencode/mapping_STAR/"$nom_rep"/" --twopassMode Basic --quantMode GeneCounts --outWigType bedGraph --outSAMtype BAM SortedByCoordinate ; done ;
+
+
+# Remove duplicates PICARD
+
+cat fichier.tmp | while read line ; do nom_rep=$(echo $line | cut -f3 -d/) ;
+java -jar /opt/picard/picard.jar MarkDuplicates I=$line O='gencode/mapping_STAR/'$nom_rep'/'$nom_rep'_rm.bam' M=marked_dup_metrics.txt REMOVE_SEQUENCING_DUPLICATES=true REMOVE_DUPLICATES=true ; done ;
+
+
+
+# Controle qualité nouveau bam - rm.bam sans les duplicats
+
+find gencode/mapping_STAR/*/*_rm.bam > remove_dupl.tmp
+
+cat remove_dupl.tmp | while read line ; do nom_rep=$(echo $line | cut -f3 -d/) ; fastqc -f bam -t 16 -o gencode/qc_bam/ ./$line ; done ;
+
+
+
+
+
+## test sur 10 → bam unsorted
+STAR --runThreadN 16 --genomeDir /home/morgane/gencode/STAR_index/ --readFilesIn fichier1 fichier2 --readFilesCommand gunzip -c --outFileNamePrefix /home/morgane/gencode/mapping_STAR/ --twopassMode Basic --outSAMtype BAM Unsorted 
+
+
+
+htseq-count -f bam Aligned.out.bam ../gencode.v26.annotation.gtf -o .
+
+
+
+
+# Récuperer la premiere et dernière colonne du fichier pour tous ceux different de 0
+
+cat counts.txt | awk '{if ($7 != 0) print $1 "\t" $7}' > count_final.txt
+
+
+
+
+cat remove_dupl.tmp | while read line
+do nom_rep=$(echo $line | cut -f3 -d/)
+
+featureCounts -T 12 -p -a gencode/gencode.v26.annotation.gtf -o 'gencode/mapping_STAR/gencode/mapping_STAR/'$nom_rep'/' $line
+
+
+
