@@ -1,0 +1,7 @@
+#Quality Control : FastQC
+
+File fastq : storage/PJ1803065-SAADI-mRNA/Rawdata/
+
+fastqc -o ~/QualityControl/QC_fastq_RNA/ storage/PJ1803065_SAADI_Exomes/Rawdata/*/*.gz
+
+Bonne qualité des fastq, problème au niveau des duplicats. On utilisera MarkDuplicates (PICARD) après l'alignement.
